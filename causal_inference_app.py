@@ -657,6 +657,52 @@ with col3:
 with col4:
     st.metric("Базовый объём перед тестом", format_num(baseline_anchor_value))
 
+st.subheader("Качество моделей")
+
+quality_notes = []
+
+# Модель 1: регрессия
+if diagnostics.r2 is not None and not pd.isna(diagnostics.r2):
+    if diagnostics.r2 >= 0.7:
+        quality_notes.append("**Модель 1:** высокая объясняющая сила. Связь целевой группы с рынком выглядит устойчивой.")
+    elif diagnostics.r2 >= 0.4:
+        quality_notes.append("**Модель 1:** средняя объясняющая сила. Рыночный сигнал полезен, но не исчерпывает поведение целевой группы.")
+    else:
+        quality_notes.append("**Модель 1:** слабая объясняющая сила. Результат следует трактовать осторожно.")
+
+if diagnostics.beta is not None:
+    if diagnostics.beta < 0:
+        quality_notes.append("**Beta < 0:** целевая группа исторически двигалась против рынка. Такая спецификация требует особенно внимательной интерпретации.")
+    elif diagnostics.beta > 1.3:
+        quality_notes.append("**Beta > 1:** целевая группа исторически реагировала на рынок сильнее самого рынка.")
+    elif diagnostics.beta < 0.7:
+        quality_notes.append("**Beta < 1:** целевая группа исторически более инертна, чем рынок.")
+
+# Модель 2: CV Leverage
+if diagnostics.leverage_l is not None and not pd.isna(diagnostics.leverage_l):
+    if 0.85 <= diagnostics.leverage_l <= 1.15:
+        quality_notes.append("**Модель 2:** целевая группа по общей волатильности близка к рынку. Метод дает нейтральную sanity-check оценку.")
+    elif diagnostics.leverage_l < 0.85:
+        quality_notes.append("**Модель 2:** целевая группа исторически более волатильна, чем рынок. Метод будет усиливать рыночные движения.")
+    else:
+        quality_notes.append("**Модель 2:** целевая группа исторически более стабильна, чем рынок. Метод будет сглаживать рыночные движения.")
+
+# Модель 3: сезонность
+hist_months_covered = hist_df["Month_Num"].nunique()
+
+if hist_months_covered >= 10:
+    quality_notes.append("**Модель 3:** сезонное покрытие хорошее. Историческая сезонность представлена достаточно широко.")
+elif hist_months_covered >= 6:
+    quality_notes.append("**Модель 3:** сезонное покрытие умеренное. Сезонную оценку желательно трактовать как ориентир, а не как единственный baseline.")
+else:
+    quality_notes.append("**Модель 3:** сезонное покрытие слабое. Надежность сезонной оценки ограничена.")
+
+if diagnostics.yoy_fallback_months:
+    quality_notes.append("**Модель 3:** для части месяцев не хватило сезонной истории, поэтому использовалось общее среднее исторического периода.")
+
+for note in quality_notes:
+    st.markdown(f"- {note}")
+
 st.markdown("---")
 
 # Блок 1: Дескриптивная статистика
