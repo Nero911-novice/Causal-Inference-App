@@ -688,17 +688,41 @@ if diagnostics.leverage_l is not None and not pd.isna(diagnostics.leverage_l):
         quality_notes.append("**Модель 2:** целевая группа исторически более стабильна, чем рынок. Метод будет сглаживать рыночные движения.")
 
 # Модель 3: сезонность
-hist_months_covered = hist_df["Month_Num"].nunique()
+hist_m3 = hist_df.dropna(subset=["Target_MoM"]).copy()
+month_support = hist_m3.groupby("Month_Num").size()
 
-if hist_months_covered >= 10:
-    quality_notes.append("**Модель 3:** сезонное покрытие хорошее. Историческая сезонность представлена достаточно широко.")
-elif hist_months_covered >= 6:
-    quality_notes.append("**Модель 3:** сезонное покрытие умеренное. Сезонную оценку желательно трактовать как ориентир, а не как единственный baseline.")
-else:
-    quality_notes.append("**Модель 3:** сезонное покрытие слабое. Надежность сезонной оценки ограничена.")
+test_months = test_df["Month_Num"].unique()
+test_month_support = month_support.reindex(test_months, fill_value=0)
+
+min_support = int(test_month_support.min())
+avg_support = float(test_month_support.mean())
 
 if diagnostics.yoy_fallback_months:
-    quality_notes.append("**Модель 3:** для части месяцев не хватило сезонной истории, поэтому использовалось общее среднее исторического периода.")
+    quality_notes.append(
+        "**Модель 3:** для части тестовых месяцев не хватило сезонной истории, "
+        "поэтому использовалось общее среднее исторического периода."
+    )
+else:
+    if min_support >= 3:
+        quality_notes.append(
+            f"**Модель 3:** хорошая поддержка тестовых месяцев. "
+            f"В среднем {avg_support:.1f} исторических наблюдения на соответствующий месяц."
+        )
+    elif min_support == 2:
+        quality_notes.append(
+            f"**Модель 3:** умеренная поддержка тестовых месяцев. "
+            f"В среднем {avg_support:.1f} исторических наблюдения на соответствующий месяц."
+        )
+    elif min_support == 1:
+        quality_notes.append(
+            f"**Модель 3:** слабая поддержка тестовых месяцев. "
+            f"В среднем {avg_support:.1f} исторических наблюдения на соответствующий месяц."
+        )
+    else:
+        quality_notes.append(
+            "**Модель 3:** для тестовых месяцев отсутствует сезонная история. "
+            "Оценка строится на fallback-логике и должна трактоваться осторожно."
+        )
 
 for note in quality_notes:
     st.markdown(f"- {note}")
