@@ -37,18 +37,30 @@ class ModelDiagnostics:
 
 
 def safe_to_datetime(series: pd.Series) -> pd.Series:
-    # 1. Явный ISO-формат: 2024-02-15
-    parsed = pd.to_datetime(series, errors="coerce", format="%Y-%m-%d")
+    """
+    Пытается преобразовать колонку к datetime.
+    Поддерживает ISO-дату, day-first и формат месяц-год.
+    Совместимо с новыми версиями pandas.
+    """
+    s = series.astype(str).str.strip()
 
-    # 2. Альтернатива для day-first, если данных много не распознано
+    # 1. Базовый и наиболее частый формат: YYYY-MM-DD
+    parsed = pd.to_datetime(s, errors="coerce", format="%Y-%m-%d")
+
+    # 2. Универсальный парсинг без жесткого формата
     if parsed.isna().mean() > 0.3:
-        parsed_alt = pd.to_datetime(series, errors="coerce", dayfirst=True)
+        parsed_alt = pd.to_datetime(s, errors="coerce")
         if parsed_alt.notna().sum() > parsed.notna().sum():
             parsed = parsed_alt
 
-    # 3. Формат месяц-год, если пользователь загрузит агрегированные месяцы
+    # 3. Day-first формат, если пользователь загрузил даты вида 15.02.2024
     if parsed.isna().mean() > 0.3:
-        s = series.astype(str).str.strip()
+        parsed_alt = pd.to_datetime(s, errors="coerce", dayfirst=True)
+        if parsed_alt.notna().sum() > parsed.notna().sum():
+            parsed = parsed_alt
+
+    # 4. Формат месяц-год для уже агрегированных месячных рядов
+    if parsed.isna().mean() > 0.3:
         parsed_alt = pd.to_datetime(s, errors="coerce", format="%Y-%m")
         if parsed_alt.notna().sum() > parsed.notna().sum():
             parsed = parsed_alt
