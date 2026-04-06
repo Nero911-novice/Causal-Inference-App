@@ -1300,6 +1300,7 @@ with rob_tabs[0]:
             use_container_width=True,
             hide_index=True
         )
+        
         render_placebo_interpretation(placebo_summary_df)
 
         with st.expander("Показать все placebo-сценарии"):
