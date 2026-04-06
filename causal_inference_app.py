@@ -37,22 +37,17 @@ class ModelDiagnostics:
 
 
 def safe_to_datetime(series: pd.Series) -> pd.Series:
-    """
-    Пытается преобразовать колонку к datetime.
-    Поддерживает частые форматы месяц-год и стандартные даты.
-    """
-    # Первая попытка — стандартный парсинг
-    parsed = pd.to_datetime(series, errors="coerce", infer_datetime_format=True)
+    # 1. Явный ISO-формат: 2024-02-15
+    parsed = pd.to_datetime(series, errors="coerce", format="%Y-%m-%d")
 
-    # Вторая попытка — dayfirst
+    # 2. Альтернатива для day-first, если данных много не распознано
     if parsed.isna().mean() > 0.3:
         parsed_alt = pd.to_datetime(series, errors="coerce", dayfirst=True)
         if parsed_alt.notna().sum() > parsed.notna().sum():
             parsed = parsed_alt
 
-    # Третья попытка — формат месяц-год как период
+    # 3. Формат месяц-год, если пользователь загрузит агрегированные месяцы
     if parsed.isna().mean() > 0.3:
-        # Приводим к строкам, убираем лишние пробелы
         s = series.astype(str).str.strip()
         parsed_alt = pd.to_datetime(s, errors="coerce", format="%Y-%m")
         if parsed_alt.notna().sum() > parsed.notna().sum():
