@@ -1217,6 +1217,203 @@ with mcol3:
 with st.expander("Помесячная детализация расчета impact"):
     st.dataframe(detailed_df, use_container_width=True, hide_index=True)
 
+st.markdown("---")
+st.subheader("4. Проверки устойчивости")
+
+with st.expander("Параметры проверок устойчивости", expanded=False):
+    rc1, rc2 = st.columns(2)
+
+    max_placebo_train = max(3, int(len(hist_df) - len(test_df)))
+    default_placebo_train = min(6, max_placebo_train)
+
+    with rc1:
+        placebo_min_train = st.number_input(
+            "Минимум месяцев train для placebo",
+            min_value=3,
+            max_value=max_placebo_train,
+            value=default_placebo_train,
+            step=1
+        )
+
+    max_shift_limit = min(4, max(1, int(len(df.loc[df['Date'] < test_start]) - 2)))
+    default_shift = min(2, max_shift_limit)
+
+    with rc2:
+        boundary_max_shift = st.slider(
+            "Максимальный сдвиг границ historical, месяцев",
+            min_value=1,
+            max_value=max_shift_limit,
+            value=default_shift
+        )
+
+actual_scenario_df = evaluate_scenario_by_masks(
+    df=df,
+    hist_mask=hist_mask,
+    test_mask=test_mask,
+    scenario_name="Фактический Test Period"
+)
+
+rob_tabs = st.tabs([
+    "Placebo-анализ",
+    "Leave-one-year-out",
+    "Leave-one-month-out",
+    "Границы Historical"
+])
+
+# -------------------------
+# TAB 1: PLACEBO
+# -------------------------
+with rob_tabs[0]:
+    st.markdown(
+        "Placebo-анализ создает внутри historical периода псевдо-тестовые окна той же длины, "
+        "что и реальный test period. Это позволяет оценить, насколько редок наблюдаемый эффект "
+        "на фоне ложных окон без акции."
+    )
+
+    placebo_df = run_placebo_analysis(
+        df=df,
+        hist_mask=hist_mask,
+        test_mask=test_mask,
+        min_train_months=int(placebo_min_train)
+    )
+
+    st.markdown("**Фактический сценарий**")
+    st.dataframe(
+        format_robustness_table(actual_scenario_df),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    if placebo_df.empty:
+        st.info(
+            "Placebo-анализ не выполнен: недостаточно длины historical периода "
+            "для формирования псевдо-окон заданной длины."
+        )
+    else:
+        placebo_summary_df = summarize_placebo_results(actual_scenario_df, placebo_df)
+
+        st.markdown("**Сводка placebo-анализа**")
+        st.dataframe(
+            format_placebo_summary_table(placebo_summary_df),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        with st.expander("Показать все placebo-сценарии"):
+            st.dataframe(
+                format_robustness_table(placebo_df),
+                use_container_width=True,
+                hide_index=True
+            )
+
+# -------------------------
+# TAB 2: LEAVE-ONE-YEAR-OUT
+# -------------------------
+with rob_tabs[1]:
+    st.markdown(
+        "Каждый год поочередно исключается из historical периода. "
+        "Если эффект остается одного знака и близкого масштаба, вывод устойчив к выбору года."
+    )
+
+    lo_year_df = run_leave_one_year_out(
+        df=df,
+        hist_mask=hist_mask,
+        test_mask=test_mask,
+        min_hist_months=6
+    )
+
+    if lo_year_df.empty:
+        st.info("Недостаточно данных для leave-one-year-out анализа.")
+    else:
+        lo_year_summary = summarize_stability_against_actual(actual_scenario_df, lo_year_df)
+
+        st.markdown("**Сводка устойчивости по годам**")
+        st.dataframe(
+            format_stability_summary_table(lo_year_summary),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        with st.expander("Показать все сценарии leave-one-year-out"):
+            st.dataframe(
+                format_robustness_table(lo_year_df),
+                use_container_width=True,
+                hide_index=True
+            )
+
+# -------------------------
+# TAB 3: LEAVE-ONE-MONTH-OUT
+# -------------------------
+with rob_tabs[2]:
+    st.markdown(
+        "Каждый отдельный месяц поочередно исключается из historical периода. "
+        "Эта проверка показывает, зависит ли оценка эффекта от одной конкретной точки ряда."
+    )
+
+    lo_month_df = run_leave_one_month_out(
+        df=df,
+        hist_mask=hist_mask,
+        test_mask=test_mask,
+        min_hist_months=6
+    )
+
+    if lo_month_df.empty:
+        st.info("Недостаточно данных для leave-one-month-out анализа.")
+    else:
+        lo_month_summary = summarize_stability_against_actual(actual_scenario_df, lo_month_df)
+
+        st.markdown("**Сводка устойчивости по месяцам**")
+        st.dataframe(
+            format_stability_summary_table(lo_month_summary),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        with st.expander("Показать все сценарии leave-one-month-out"):
+            st.dataframe(
+                format_robustness_table(lo_month_df),
+                use_container_width=True,
+                hide_index=True
+            )
+
+# -------------------------
+# TAB 4: BOUNDARY SENSITIVITY
+# -------------------------
+with rob_tabs[3]:
+    st.markdown(
+        "Границы historical периода сдвигаются вокруг исходного окна. "
+        "Если эффект радикально меняется при малом сдвиге границ, вывод чувствителен к спецификации."
+    )
+
+    boundary_df = run_boundary_sensitivity(
+        df=df,
+        hist_start=hist_start,
+        hist_end=hist_end,
+        test_start=test_start,
+        test_end=test_end,
+        max_shift_months=int(boundary_max_shift),
+        min_hist_months=6
+    )
+
+    if boundary_df.empty:
+        st.info("Не удалось построить сценарии чувствительности к границам historical периода.")
+    else:
+        boundary_summary = summarize_stability_against_actual(actual_scenario_df, boundary_df)
+
+        st.markdown("**Сводка чувствительности к границам historical периода**")
+        st.dataframe(
+            format_stability_summary_table(boundary_summary),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        with st.expander("Показать все сценарии boundary sensitivity"):
+            st.dataframe(
+                format_robustness_table(boundary_df),
+                use_container_width=True,
+                hide_index=True
+            )
+
 # Краткая методологическая справка
 with st.expander("Методологические пояснения"):
     st.markdown(
