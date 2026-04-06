@@ -939,6 +939,8 @@ def run_boundary_sensitivity(
     return result_df
 
 
+
+
 # =========================
 # Сайдбар
 # =========================
@@ -1298,6 +1300,7 @@ with rob_tabs[0]:
             use_container_width=True,
             hide_index=True
         )
+        render_placebo_interpretation(placebo_summary_df)
 
         with st.expander("Показать все placebo-сценарии"):
             st.dataframe(
@@ -1332,6 +1335,10 @@ with rob_tabs[1]:
             format_stability_summary_table(lo_year_summary),
             use_container_width=True,
             hide_index=True
+        )
+        render_stability_interpretation(
+            lo_year_summary,
+            context_label="исключение одного года"
         )
 
         with st.expander("Показать все сценарии leave-one-year-out"):
@@ -1406,7 +1413,11 @@ with rob_tabs[3]:
             use_container_width=True,
             hide_index=True
         )
-
+        render_stability_interpretation(
+            boundary_summary,
+            context_label="сдвиг границ historical периода"
+        )
+   
         with st.expander("Показать все сценарии boundary sensitivity"):
             st.dataframe(
                 format_robustness_table(boundary_df),
